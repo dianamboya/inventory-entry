@@ -1,5 +1,5 @@
 // app.js
-import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js";
+import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js?v=2";
 
 const el = (id) => document.getElementById(id);
 
@@ -11,21 +11,24 @@ const equipment = el("equipment");
 const serialInput = el("serialInput");
 const serialLabel = el("serialLabel");
 const serialHint = el("serialHint");
-
 const os = el("os");
 const security = el("security");
 const preview = el("preview");
 
-// Store serials even when user switches equipment dropdown
-const serialState = {
-  laptop: "",
-  printer: "",
-  cpu: "",
-  monitor: ""
-};
+const serialState = { laptop: "", printer: "", cpu: "", monitor: "" };
 
-function fillSelect(selectEl, options) {
+function fillSelect(selectEl, options, placeholderText = null) {
   selectEl.innerHTML = "";
+
+  if (placeholderText) {
+    const p = document.createElement("option");
+    p.value = "";
+    p.textContent = placeholderText;
+    p.disabled = true;
+    p.selected = true;
+    selectEl.appendChild(p);
+  }
+
   for (const v of options) {
     const opt = document.createElement("option");
     opt.value = v;
@@ -34,11 +37,10 @@ function fillSelect(selectEl, options) {
   }
 }
 
-// ✅ Auto-load floors based on selected block
 function updateFloors() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
-  fillSelect(floor, floors);
+  fillSelect(floor, floors, "Select Floor");
 }
 
 function updateEquipmentOptions() {
@@ -55,7 +57,8 @@ function updateEquipmentOptions() {
   } else if (t === "Desktop Computer") {
     fillSelect(equipment, ["CPU", "Monitor"]);
     equipment.value = "CPU";
-    serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
+    serialHint.textContent =
+      "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
   }
 
   syncSerialInput();
@@ -108,12 +111,10 @@ function makeRow() {
     block: block.value,
     floor: floor.value,
     room: el("room").value.trim() || "",
-
     laptopSerial: t === "Laptop" ? serialState.laptop : "",
     printerSerial: t === "Printer" ? serialState.printer : "",
     cpuSerial: t === "Desktop Computer" ? serialState.cpu : "",
     monitorSerial: t === "Desktop Computer" ? serialState.monitor : "",
-
     os: os.value,
     security: security.value,
     timestamp: new Date().toISOString()
@@ -138,18 +139,13 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-// Init dropdowns
-fillSelect(deviceType, DEVICE_TYPES);
-fillSelect(block, Object.keys(BLOCKS));
-fillSelect(os, OPERATING_SYSTEMS);
-fillSelect(security, SECURITY_OPTIONS);
+// INIT (important order)
+fillSelect(deviceType, DEVICE_TYPES, "Select Device Type");
+fillSelect(block, Object.keys(BLOCKS), "Select Block");
+fillSelect(os, OPERATING_SYSTEMS, "Select OS");
+fillSelect(security, SECURITY_OPTIONS, "Select Security");
 
-// Init dependent fields
-updateFloors();
-updateEquipmentOptions();
-preview.textContent = JSON.stringify(makeRow(), null, 2);
-
-// Events
+// EVENTS
 block.addEventListener("change", () => {
   updateFloors();
   preview.textContent = JSON.stringify(makeRow(), null, 2);
@@ -174,15 +170,10 @@ form.addEventListener("submit", (e) => {
 
   const t = deviceType.value;
 
-  // ✅ Enforce BOTH CPU + Monitor for Desktop Computer
-  if (t === "Desktop Computer") {
-    if (!serialState.cpu || !serialState.monitor) {
-      alert("Desktop Computer requires BOTH CPU and Monitor serial numbers.");
-      return;
-    }
+  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
+    alert("Desktop Computer requires BOTH CPU and Monitor serial numbers.");
+    return;
   }
-
-  // ✅ Enforce serial for Laptop/Printer
   if (t === "Laptop" && !serialState.laptop) {
     alert("Laptop serial number is required.");
     return;
@@ -194,9 +185,6 @@ form.addEventListener("submit", (e) => {
 
   const row = makeRow();
   const csv = toCSV(row);
-
   const safeUser = (row.username || "user").replace(/[^a-z0-9_-]/gi, "_");
-  const file = `inventory_${safeUser}_${Date.now()}.csv`;
-
-  downloadText(file, csv);
+  downloadText(`inventory_${safeUser}_${Date.now()}.csv`, csv);
 });
