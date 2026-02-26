@@ -6,14 +6,22 @@ const form = el("invForm");
 const deviceType = el("deviceType");
 const block = el("block");
 const floor = el("floor");
-const room = el("room");
+const equipment = el("equipment");
+const serialInput = el("serialInput");
+const serialLabel = el("serialLabel");
+const serialHint = el("serialHint");
+
 const os = el("os");
 const security = el("security");
-
-const singleSerialWrap = el("singleSerialWrap");
-const desktopSerialWrap = el("desktopSerialWrap");
-
 const preview = el("preview");
+
+// Store serials safely even when user switches dropdown
+const serialState = {
+  laptop: "",
+  printer: "",
+  cpu: "",
+  monitor: ""
+};
 
 function fillSelect(selectEl, options, includeBlank = false) {
   selectEl.innerHTML = "";
@@ -35,38 +43,69 @@ function updateFloorsAndRooms() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
   fillSelect(floor, floors);
-
-  updateRooms();
 }
 
-function updateRooms() {
-  const b = block.value;
-  const f = floor.value;
-
-  const rooms = (BLOCKS[b]?.rooms?.[f] ?? []).filter(Boolean);
-  fillSelect(room, rooms, true); // optional
-}
-
-function updateSerialFields() {
+// ✅ Equipment dropdown depends on device type
+function updateEquipmentOptions() {
   const t = deviceType.value;
 
-  singleSerialWrap.classList.add("hidden");
-  desktopSerialWrap.classList.add("hidden");
-
-  // reset required flags
-  el("deviceSerial").required = false;
-  el("cpuSerial").required = false;
-  el("monitorSerial").required = false;
-
-  if (t === "Laptop" || t === "Printer") {
-    singleSerialWrap.classList.remove("hidden");
-    el("deviceSerial").required = true;
+  if (t === "Laptop") {
+    fillSelect(equipment, ["Laptop"]);
+    equipment.value = "Laptop";
+    serialHint.textContent = "";
+  } else if (t === "Printer") {
+    fillSelect(equipment, ["Printer"]);
+    equipment.value = "Printer";
+    serialHint.textContent = "";
   } else if (t === "Desktop Computer") {
-    desktopSerialWrap.classList.remove("hidden");
-    el("cpuSerial").required = true;
-    el("monitorSerial").required = true;
+    fillSelect(equipment, ["CPU", "Monitor"]);
+    equipment.value = "CPU";
+    serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
+  }
+
+  // update input to match selected equipment
+  syncSerialInput();
+}
+
+// ✅ When equipment changes, load saved serial into the input
+function syncSerialInput() {
+  const eq = equipment.value;
+
+  if (eq === "Laptop") {
+    serialLabel.firstChild.textContent = "Laptop Serial Number";
+    serialInput.value = serialState.laptop;
+    serialInput.required = true;
+    serialInput.placeholder = "Enter laptop serial";
+  } else if (eq === "Printer") {
+    serialLabel.firstChild.textContent = "Printer Serial Number";
+    serialInput.value = serialState.printer;
+    serialInput.required = true;
+    serialInput.placeholder = "Enter printer serial";
+  } else if (eq === "CPU") {
+    serialLabel.firstChild.textContent = "CPU Serial Number";
+    serialInput.value = serialState.cpu;
+    serialInput.required = true;
+    serialInput.placeholder = "Enter CPU serial";
+  } else if (eq === "Monitor") {
+    serialLabel.firstChild.textContent = "Monitor Serial Number";
+    serialInput.value = serialState.monitor;
+    serialInput.required = true;
+    serialInput.placeholder = "Enter monitor serial";
   }
 }
+
+// ✅ Save serial input into correct slot as user types
+serialInput.addEventListener("input", () => {
+  const eq = equipment.value;
+  const v = serialInput.value.trim();
+
+  if (eq === "Laptop") serialState.laptop = v;
+  if (eq === "Printer") serialState.printer = v;
+  if (eq === "CPU") serialState.cpu = v;
+  if (eq === "Monitor") serialState.monitor = v;
+
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
 
 function makeRow() {
   const t = deviceType.value;
@@ -76,10 +115,13 @@ function makeRow() {
     deviceType: t,
     block: block.value,
     floor: floor.value,
-    room: room.value || "",
-    laptopOrPrinterSerial: (t === "Laptop" || t === "Printer") ? el("deviceSerial").value.trim() : "",
-    cpuSerial: (t === "Desktop Computer") ? el("cpuSerial").value.trim() : "",
-    monitorSerial: (t === "Desktop Computer") ? el("monitorSerial").value.trim() : "",
+    room: el("room").value.trim() || "",
+
+    laptopSerial: t === "Laptop" ? serialState.laptop : "",
+    printerSerial: t === "Printer" ? serialState.printer : "",
+    cpuSerial: t === "Desktop Computer" ? serialState.cpu : "",
+    monitorSerial: t === "Desktop Computer" ? serialState.monitor : "",
+
     os: os.value,
     security: security.value,
     timestamp: new Date().toISOString()
@@ -88,8 +130,8 @@ function makeRow() {
 
 function toCSV(obj) {
   const headers = Object.keys(obj);
-  const values = headers.map(h => String(obj[h]).replaceAll('"', '""'));
-  return `${headers.join(",")}\n${values.map(v => `"${v}"`).join(",")}\n`;
+  const values = headers.map((h) => String(obj[h]).replaceAll('"', '""'));
+  return `${headers.join(",")}\n${values.map((v) => `"${v}"`).join(",")}\n`;
 }
 
 function downloadText(filename, text) {
@@ -111,18 +153,40 @@ fillSelect(os, OPERATING_SYSTEMS);
 fillSelect(security, SECURITY_OPTIONS);
 
 updateFloorsAndRooms();
-updateSerialFields();
+updateEquipmentOptions();
+preview.textContent = JSON.stringify(makeRow(), null, 2);
 
+// Events
 block.addEventListener("change", updateFloorsAndRooms);
-floor.addEventListener("change", updateRooms);
-deviceType.addEventListener("change", updateSerialFields);
-
-form.addEventListener("input", () => {
+deviceType.addEventListener("change", () => {
+  updateEquipmentOptions();
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
+equipment.addEventListener("change", syncSerialInput);
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
+
+  const t = deviceType.value;
+
+  // ✅ Enforce BOTH CPU + Monitor for Desktop Computer
+  if (t === "Desktop Computer") {
+    if (!serialState.cpu || !serialState.monitor) {
+      alert("Desktop Computer requires BOTH CPU and Monitor serial numbers.");
+      return;
+    }
+  }
+
+  // ✅ Enforce serial for Laptop/Printer
+  if (t === "Laptop" && !serialState.laptop) {
+    alert("Laptop serial number is required.");
+    return;
+  }
+  if (t === "Printer" && !serialState.printer) {
+    alert("Printer serial number is required.");
+    return;
+  }
+
   const row = makeRow();
   const csv = toCSV(row);
 
