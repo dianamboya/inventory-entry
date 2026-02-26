@@ -1,3 +1,4 @@
+// app.js
 import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js";
 
 const el = (id) => document.getElementById(id);
@@ -15,7 +16,7 @@ const os = el("os");
 const security = el("security");
 const preview = el("preview");
 
-// Store serials safely even when user switches dropdown
+// Store serials even when user switches equipment dropdown
 const serialState = {
   laptop: "",
   printer: "",
@@ -23,14 +24,8 @@ const serialState = {
   monitor: ""
 };
 
-function fillSelect(selectEl, options, includeBlank = false) {
+function fillSelect(selectEl, options) {
   selectEl.innerHTML = "";
-  if (includeBlank) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "-- optional --";
-    selectEl.appendChild(opt);
-  }
   for (const v of options) {
     const opt = document.createElement("option");
     opt.value = v;
@@ -39,13 +34,13 @@ function fillSelect(selectEl, options, includeBlank = false) {
   }
 }
 
-function updateFloorsAndRooms() {
+// ✅ Auto-load floors based on selected block
+function updateFloors() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
   fillSelect(floor, floors);
 }
 
-// ✅ Equipment dropdown depends on device type
 function updateEquipmentOptions() {
   const t = deviceType.value;
 
@@ -63,11 +58,9 @@ function updateEquipmentOptions() {
     serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
   }
 
-  // update input to match selected equipment
   syncSerialInput();
 }
 
-// ✅ When equipment changes, load saved serial into the input
 function syncSerialInput() {
   const eq = equipment.value;
 
@@ -94,7 +87,6 @@ function syncSerialInput() {
   }
 }
 
-// ✅ Save serial input into correct slot as user types
 serialInput.addEventListener("input", () => {
   const eq = equipment.value;
   const v = serialInput.value.trim();
@@ -146,23 +138,36 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-// Init
+// Init dropdowns
 fillSelect(deviceType, DEVICE_TYPES);
 fillSelect(block, Object.keys(BLOCKS));
 fillSelect(os, OPERATING_SYSTEMS);
 fillSelect(security, SECURITY_OPTIONS);
 
-updateFloorsAndRooms();
+// Init dependent fields
+updateFloors();
 updateEquipmentOptions();
 preview.textContent = JSON.stringify(makeRow(), null, 2);
 
 // Events
-block.addEventListener("change", updateFloorsAndRooms);
+block.addEventListener("change", () => {
+  updateFloors();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
 deviceType.addEventListener("change", () => {
   updateEquipmentOptions();
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
-equipment.addEventListener("change", syncSerialInput);
+
+equipment.addEventListener("change", () => {
+  syncSerialInput();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
+form.addEventListener("input", () => {
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
