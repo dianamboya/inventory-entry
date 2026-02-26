@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -64,10 +63,19 @@
         <select id="security" required></select>
       </label>
 
+      <!-- Submit button -->
       <button type="submit" id="submitBtn">Submit</button>
 
+      <!-- Master CSV Actions -->
+      <div class="actions">
+        <button type="button" id="downloadMasterBtn">Download Master CSV</button>
+        <button type="button" id="clearEntriesBtn">Clear Saved Entries</button>
+      </div>
+
+      <p id="countInfo" class="hint"></p>
+
       <p class="hint">
-        Tip: After submit, the entry downloads as a CSV file (you can upload/commit it to GitHub).
+        Tip: Submit saves entries in this browser. Use “Download Master CSV” to export all saved entries into one file.
       </p>
     </form>
 

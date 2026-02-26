@@ -54,3 +54,9 @@ body {
     overflow: auto;
     margin-top: 14px;
   }
+
+  .actions {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+  }

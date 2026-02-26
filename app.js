@@ -1,5 +1,5 @@
 // app.js
-import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js?v=2";
+import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js?v=3";
 
 const el = (id) => document.getElementById(id);
 
@@ -15,6 +15,13 @@ const os = el("os");
 const security = el("security");
 const preview = el("preview");
 
+const downloadMasterBtn = el("downloadMasterBtn");
+const clearEntriesBtn = el("clearEntriesBtn");
+const countInfo = el("countInfo");
+
+const STORAGE_KEY = "inventory_entries_v1";
+
+// keep serials even when switching equipment
 const serialState = { laptop: "", printer: "", cpu: "", monitor: "" };
 
 function fillSelect(selectEl, options, placeholderText = null) {
@@ -57,8 +64,7 @@ function updateEquipmentOptions() {
   } else if (t === "Desktop Computer") {
     fillSelect(equipment, ["CPU", "Monitor"]);
     equipment.value = "CPU";
-    serialHint.textContent =
-      "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
+    serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
   }
 
   syncSerialInput();
@@ -111,20 +117,73 @@ function makeRow() {
     block: block.value,
     floor: floor.value,
     room: el("room").value.trim() || "",
+
     laptopSerial: t === "Laptop" ? serialState.laptop : "",
     printerSerial: t === "Printer" ? serialState.printer : "",
     cpuSerial: t === "Desktop Computer" ? serialState.cpu : "",
     monitorSerial: t === "Desktop Computer" ? serialState.monitor : "",
+
     os: os.value,
     security: security.value,
     timestamp: new Date().toISOString()
   };
 }
 
-function toCSV(obj) {
-  const headers = Object.keys(obj);
-  const values = headers.map((h) => String(obj[h]).replaceAll('"', '""'));
-  return `${headers.join(",")}\n${values.map((v) => `"${v}"`).join(",")}\n`;
+function loadEntries() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveEntries(entries) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  updateCount();
+}
+
+function updateCount() {
+  const entries = loadEntries();
+  if (countInfo) countInfo.textContent = `Saved entries: ${entries.length}`;
+}
+
+function validateBeforeSave() {
+  const t = deviceType.value;
+
+  if (!el("username").value.trim()) return "Username is required.";
+  if (!deviceType.value) return "Device Type is required.";
+  if (!block.value) return "Block is required.";
+  if (!floor.value) return "Floor is required.";
+  if (!os.value) return "Operating System is required.";
+  if (!security.value) return "Security is required.";
+
+  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
+    return "Desktop Computer requires BOTH CPU and Monitor serial numbers.";
+  }
+  if (t === "Laptop" && !serialState.laptop) return "Laptop serial number is required.";
+  if (t === "Printer" && !serialState.printer) return "Printer serial number is required.";
+
+  return null;
+}
+
+function entriesToCSV(entries) {
+  if (!entries.length) return "";
+
+  // Keep consistent header order
+  const headers = [
+    "username", "deviceType", "block", "floor", "room",
+    "laptopSerial", "printerSerial", "cpuSerial", "monitorSerial",
+    "os", "security", "timestamp"
+  ];
+
+  const escape = (val) => `"${String(val ?? "").replaceAll('"', '""')}"`;
+
+  const lines = [
+    headers.join(","),
+    ...entries.map((row) => headers.map((h) => escape(row[h])).join(","))
+  ];
+
+  return lines.join("\n") + "\n";
 }
 
 function downloadText(filename, text) {
@@ -139,11 +198,26 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-// INIT (important order)
+function resetFormForNextEntry() {
+  // keep block/device selections if you want; here we reset most fields
+  el("username").value = "";
+  el("room").value = "";
+  serialState.laptop = "";
+  serialState.printer = "";
+  serialState.cpu = "";
+  serialState.monitor = "";
+  serialInput.value = "";
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+}
+
+// INIT
 fillSelect(deviceType, DEVICE_TYPES, "Select Device Type");
 fillSelect(block, Object.keys(BLOCKS), "Select Block");
 fillSelect(os, OPERATING_SYSTEMS, "Select OS");
 fillSelect(security, SECURITY_OPTIONS, "Select Security");
+
+preview.textContent = JSON.stringify(makeRow(), null, 2);
+updateCount();
 
 // EVENTS
 block.addEventListener("change", () => {
@@ -165,26 +239,47 @@ form.addEventListener("input", () => {
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
 
+// ✅ SUBMIT: save to master list (no per-entry download)
 form.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  const t = deviceType.value;
-
-  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
-    alert("Desktop Computer requires BOTH CPU and Monitor serial numbers.");
-    return;
-  }
-  if (t === "Laptop" && !serialState.laptop) {
-    alert("Laptop serial number is required.");
-    return;
-  }
-  if (t === "Printer" && !serialState.printer) {
-    alert("Printer serial number is required.");
+  const err = validateBeforeSave();
+  if (err) {
+    alert(err);
     return;
   }
 
   const row = makeRow();
-  const csv = toCSV(row);
-  const safeUser = (row.username || "user").replace(/[^a-z0-9_-]/gi, "_");
-  downloadText(`inventory_${safeUser}_${Date.now()}.csv`, csv);
+  const entries = loadEntries();
+  entries.push(row);
+  saveEntries(entries);
+
+  alert("Saved! Use 'Download Master CSV' when ready.");
+  resetFormForNextEntry();
+});
+
+// ✅ Download combined CSV anytime
+downloadMasterBtn?.addEventListener("click", () => {
+  const entries = loadEntries();
+  if (!entries.length) {
+    alert("No saved entries yet.");
+    return;
+  }
+  const csv = entriesToCSV(entries);
+  downloadText(`inventory_master_${Date.now()}.csv`, csv);
+});
+
+// ✅ Clear saved entries
+clearEntriesBtn?.addEventListener("click", () => {
+  const entries = loadEntries();
+  if (!entries.length) {
+    alert("Nothing to clear.");
+    return;
+  }
+  const ok = confirm("Clear all saved entries? This cannot be undone.");
+  if (!ok) return;
+
+  localStorage.removeItem(STORAGE_KEY);
+  updateCount();
+  alert("Cleared.");
 });
