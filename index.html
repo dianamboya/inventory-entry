@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Equipment Inventory Entry</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <h1>Equipment Inventory Entry</h1>
+
+    <form id="invForm">
+      <label>
+        Username
+        <input id="username" required placeholder="e.g., diana.m" />
+      </label>
+
+      <label>
+        Device Type
+        <select id="deviceType" required></select>
+      </label>
+
+      <label>
+        Block
+        <select id="block" required></select>
+      </label>
+
+      <label>
+        Floor
+        <select id="floor" required></select>
+      </label>
+
+      <label>
+        Room (optional)
+        <select id="room">
+          <option value="">-- optional --</option>
+        </select>
+      </label>
+
+      <!-- Laptop/Printer -->
+      <div id="singleSerialWrap" class="hidden">
+        <label>
+          Device Serial Number
+          <input id="deviceSerial" placeholder="Serial number" />
+        </label>
+      </div>
+
+      <!-- Desktop -->
+      <div id="desktopSerialWrap" class="hidden">
+        <label>
+          CPU Serial Number
+          <input id="cpuSerial" placeholder="CPU serial" />
+        </label>
+        <label>
+          Monitor Serial Number
+          <input id="monitorSerial" placeholder="Monitor serial" />
+        </label>
+      </div>
+
+      <label>
+        Operating System
+        <select id="os" required></select>
+      </label>
+
+      <label>
+        Security
+        <select id="security" required></select>
+      </label>
+
+      <button type="submit">Download CSV Entry</button>
+      <p class="hint">Tip: After download, you can upload/commit the CSV to GitHub.</p>
+    </form>
+
+    <pre id="preview" class="preview"></pre>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
