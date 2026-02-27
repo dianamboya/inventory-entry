@@ -1,5 +1,11 @@
 // app.js
-import { BLOCKS, DEVICE_TYPES, OPERATING_SYSTEMS, SECURITY_OPTIONS } from "./data.js?v=3";
+import {
+  BLOCKS,
+  DEVICE_TYPES,
+  PRINTER_TYPES,
+  OPERATING_SYSTEMS,
+  SECURITY_OPTIONS
+} from "./data.js?v=105";
 
 const el = (id) => document.getElementById(id);
 
@@ -7,10 +13,15 @@ const form = el("invForm");
 const deviceType = el("deviceType");
 const block = el("block");
 const floor = el("floor");
+
+const printerTypeWrap = el("printerTypeWrap");
+const printerType = el("printerType");
+
 const equipment = el("equipment");
 const serialInput = el("serialInput");
 const serialLabel = el("serialLabel");
 const serialHint = el("serialHint");
+
 const os = el("os");
 const security = el("security");
 const preview = el("preview");
@@ -19,9 +30,9 @@ const downloadMasterBtn = el("downloadMasterBtn");
 const clearEntriesBtn = el("clearEntriesBtn");
 const countInfo = el("countInfo");
 
-const STORAGE_KEY = "inventory_entries_v1";
+const STORAGE_KEY = "inventory_entries_v3";
 
-// keep serials even when switching equipment
+// serials stored even when switching equipment
 const serialState = { laptop: "", printer: "", cpu: "", monitor: "" };
 
 function fillSelect(selectEl, options, placeholderText = null) {
@@ -44,12 +55,44 @@ function fillSelect(selectEl, options, placeholderText = null) {
   }
 }
 
+/** ✅ Block -> Floors (DOSH => no floors) */
 function updateFloors() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
-  fillSelect(floor, floors, "Select Floor");
+
+  if (floors.length === 0) {
+    // DOSH or any block with no floors
+    floor.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "N/A";
+    opt.textContent = "N/A";
+    opt.selected = true;
+    floor.appendChild(opt);
+
+    floor.disabled = true;
+    floor.required = false;
+  } else {
+    fillSelect(floor, floors, "Select Floor");
+    floor.disabled = false;
+    floor.required = true;
+  }
 }
 
+/** ✅ Show printer type only when Printer selected */
+function updatePrinterTypeVisibility() {
+  const t = deviceType.value;
+  if (t === "Printer") {
+    printerTypeWrap.style.display = "block";
+    fillSelect(printerType, PRINTER_TYPES, "Select Printer Type");
+    printerType.required = true;
+  } else {
+    printerTypeWrap.style.display = "none";
+    printerType.required = false;
+    printerType.innerHTML = "";
+  }
+}
+
+/** ✅ Equipment dropdown depends on device type */
 function updateEquipmentOptions() {
   const t = deviceType.value;
 
@@ -60,7 +103,7 @@ function updateEquipmentOptions() {
   } else if (t === "Printer") {
     fillSelect(equipment, ["Printer"]);
     equipment.value = "Printer";
-    serialHint.textContent = "";
+    serialHint.textContent = "Select printer type above, then enter the serial number.";
   } else if (t === "Desktop Computer") {
     fillSelect(equipment, ["CPU", "Monitor"]);
     equipment.value = "CPU";
@@ -114,8 +157,10 @@ function makeRow() {
   return {
     username: el("username").value.trim(),
     deviceType: t,
+    printerType: t === "Printer" ? (printerType.value || "") : "",
+
     block: block.value,
-    floor: floor.value,
+    floor: floor.disabled ? "N/A" : (floor.value || ""),
     room: el("room").value.trim() || "",
 
     laptopSerial: t === "Laptop" ? serialState.laptop : "",
@@ -127,6 +172,31 @@ function makeRow() {
     security: security.value,
     timestamp: new Date().toISOString()
   };
+}
+
+function validateBeforeSave() {
+  const t = deviceType.value;
+
+  if (!el("username").value.trim()) return "Username is required.";
+  if (!t) return "Device Type is required.";
+  if (!block.value) return "Block is required.";
+
+  // If floors exist, floor is required; if DOSH (N/A), not required
+  if (!floor.disabled && !floor.value) return "Floor is required.";
+
+  // Printer Type required
+  if (t === "Printer" && !printerType.value) return "Printer Type is required.";
+
+  if (!os.value) return "Operating System is required.";
+  if (!security.value) return "Security is required.";
+
+  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
+    return "Desktop Computer requires BOTH CPU and Monitor serial numbers.";
+  }
+  if (t === "Laptop" && !serialState.laptop) return "Laptop serial number is required.";
+  if (t === "Printer" && !serialState.printer) return "Printer serial number is required.";
+
+  return null;
 }
 
 function loadEntries() {
@@ -147,33 +217,23 @@ function updateCount() {
   if (countInfo) countInfo.textContent = `Saved entries: ${entries.length}`;
 }
 
-function validateBeforeSave() {
-  const t = deviceType.value;
-
-  if (!el("username").value.trim()) return "Username is required.";
-  if (!deviceType.value) return "Device Type is required.";
-  if (!block.value) return "Block is required.";
-  if (!floor.value) return "Floor is required.";
-  if (!os.value) return "Operating System is required.";
-  if (!security.value) return "Security is required.";
-
-  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
-    return "Desktop Computer requires BOTH CPU and Monitor serial numbers.";
-  }
-  if (t === "Laptop" && !serialState.laptop) return "Laptop serial number is required.";
-  if (t === "Printer" && !serialState.printer) return "Printer serial number is required.";
-
-  return null;
-}
-
 function entriesToCSV(entries) {
   if (!entries.length) return "";
 
-  // Keep consistent header order
   const headers = [
-    "username", "deviceType", "block", "floor", "room",
-    "laptopSerial", "printerSerial", "cpuSerial", "monitorSerial",
-    "os", "security", "timestamp"
+    "username",
+    "deviceType",
+    "printerType",
+    "block",
+    "floor",
+    "room",
+    "laptopSerial",
+    "printerSerial",
+    "cpuSerial",
+    "monitorSerial",
+    "os",
+    "security",
+    "timestamp"
   ];
 
   const escape = (val) => `"${String(val ?? "").replaceAll('"', '""')}"`;
@@ -199,25 +259,31 @@ function downloadText(filename, text) {
 }
 
 function resetFormForNextEntry() {
-  // keep block/device selections if you want; here we reset most fields
   el("username").value = "";
   el("room").value = "";
+
+  // Reset printer type
+  if (printerTypeWrap) printerTypeWrap.style.display = "none";
+  if (printerType) printerType.innerHTML = "";
+
+  // Clear serial states
   serialState.laptop = "";
   serialState.printer = "";
   serialState.cpu = "";
   serialState.monitor = "";
   serialInput.value = "";
+
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 }
 
-// INIT
+// INIT dropdowns
 fillSelect(deviceType, DEVICE_TYPES, "Select Device Type");
 fillSelect(block, Object.keys(BLOCKS), "Select Block");
 fillSelect(os, OPERATING_SYSTEMS, "Select OS");
 fillSelect(security, SECURITY_OPTIONS, "Select Security");
 
-preview.textContent = JSON.stringify(makeRow(), null, 2);
 updateCount();
+preview.textContent = JSON.stringify(makeRow(), null, 2);
 
 // EVENTS
 block.addEventListener("change", () => {
@@ -226,7 +292,12 @@ block.addEventListener("change", () => {
 });
 
 deviceType.addEventListener("change", () => {
+  updatePrinterTypeVisibility();
   updateEquipmentOptions();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
+printerType?.addEventListener("change", () => {
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
 
@@ -239,43 +310,32 @@ form.addEventListener("input", () => {
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
 
-// ✅ SUBMIT: save to master list (no per-entry download)
+// ✅ SUBMIT = save only
 form.addEventListener("submit", (e) => {
   e.preventDefault();
 
   const err = validateBeforeSave();
-  if (err) {
-    alert(err);
-    return;
-  }
+  if (err) return alert(err);
 
-  const row = makeRow();
   const entries = loadEntries();
-  entries.push(row);
+  entries.push(makeRow());
   saveEntries(entries);
 
-  alert("Saved! Use 'Download Master CSV' when ready.");
+  alert("Saved! Use 'Download Master CSV' to export all saved entries.");
   resetFormForNextEntry();
 });
 
-// ✅ Download combined CSV anytime
+// ✅ DOWNLOAD MASTER CSV
 downloadMasterBtn?.addEventListener("click", () => {
   const entries = loadEntries();
-  if (!entries.length) {
-    alert("No saved entries yet.");
-    return;
-  }
+  if (!entries.length) return alert("No saved entries yet.");
+
   const csv = entriesToCSV(entries);
   downloadText(`inventory_master_${Date.now()}.csv`, csv);
 });
 
-// ✅ Clear saved entries
+// ✅ CLEAR
 clearEntriesBtn?.addEventListener("click", () => {
-  const entries = loadEntries();
-  if (!entries.length) {
-    alert("Nothing to clear.");
-    return;
-  }
   const ok = confirm("Clear all saved entries? This cannot be undone.");
   if (!ok) return;
 

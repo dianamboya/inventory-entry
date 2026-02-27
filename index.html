@@ -9,7 +9,7 @@
 
 <body>
   <main class="card">
-    <h1>Equipment Inventory Entry</h1>
+    <h1>Ministry of Labour - ICT Equipment Inventory Entry</h1>
 
     <form id="invForm">
       <label>
@@ -21,6 +21,14 @@
         Device Type
         <select id="deviceType" required></select>
       </label>
+
+      <!-- ✅ Printer Type (only shows when Printer is selected) -->
+      <div id="printerTypeWrap" style="display:none;">
+        <label>
+          Printer Type
+          <select id="printerType"></select>
+        </label>
+      </div>
 
       <label>
         Block
@@ -63,13 +71,13 @@
         <select id="security" required></select>
       </label>
 
-      <!-- Submit button -->
+      <!-- ✅ Submit button -->
       <button type="submit" id="submitBtn">Submit</button>
 
-      <!-- Master CSV Actions -->
+      <!-- ✅ Master CSV Actions -->
       <div class="actions">
         <button type="button" id="downloadMasterBtn">Download Master CSV</button>
-        <!-- <button type="button" id="clearEntriesBtn">Clear Saved Entries</button> -->
+        <button type="button" id="clearEntriesBtn">Clear Saved Entries</button>
       </div>
 
       <p id="countInfo" class="hint"></p>
@@ -79,7 +87,7 @@
       </p>
     </form>
 
-    <!-- <pre id="preview" class="preview"></pre> -->
+    <pre id="preview" class="preview"></pre>
   </main>
 
   <script type="module" src="app.js"></script>
