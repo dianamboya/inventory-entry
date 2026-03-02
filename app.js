@@ -5,7 +5,7 @@ import {
   PRINTER_TYPES,
   OPERATING_SYSTEMS,
   SECURITY_OPTIONS
-} from "./data.js?v=400";
+} from "./data.js?v=500";
 
 const el = (id) => document.getElementById(id);
 
@@ -61,7 +61,6 @@ function updateFloors() {
   const floors = BLOCKS[b]?.floors ?? [];
 
   if (floors.length === 0) {
-    // DOSH or any block with no floors
     floor.innerHTML = "";
     const opt = document.createElement("option");
     opt.value = "N/A";
@@ -257,7 +256,7 @@ form.addEventListener("input", () => {
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
 
-// ✅ SUBMIT: send to Google Sheets using form-urlencoded (avoids CORS preflight)
+// ✅ SUBMIT: send to Google Sheets using FormData + no-cors (most reliable)
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -266,24 +265,22 @@ form.addEventListener("submit", async (e) => {
 
   const row = makeRow();
 
-  // Send as x-www-form-urlencoded to avoid CORS preflight issues
-  const body = new URLSearchParams(row).toString();
+  // FormData avoids JSON/CORS headaches
+  const fd = new FormData();
+  Object.entries(row).forEach(([k, v]) => fd.append(k, v ?? ""));
 
   try {
-    const res = await fetch(WEB_APP_URL, {
+    await fetch(WEB_APP_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
-      },
-      body
+      mode: "no-cors",
+      body: fd
     });
 
-    if (!res.ok) throw new Error("Request failed");
-
-    alert("Saved to master sheet successfully!");
+    // We can't read response in no-cors, but submission should be written.
+    alert("Submitted ✅ Check the Google Sheet for the new row.");
     resetFormForNextEntry();
   } catch (error) {
-    alert("Error saving data. Check Web App deployment access (Anyone) and redeploy new version.");
+    alert("Error submitting. Confirm the Web App is deployed as 'Anyone' and redeployed.");
     console.error(error);
   }
 });
