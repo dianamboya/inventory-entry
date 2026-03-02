@@ -5,7 +5,7 @@ import {
   PRINTER_TYPES,
   OPERATING_SYSTEMS,
   SECURITY_OPTIONS
-} from "./data.js?v=105";
+} from "./data.js?v=300";
 
 const el = (id) => document.getElementById(id);
 
@@ -26,14 +26,17 @@ const os = el("os");
 const security = el("security");
 const preview = el("preview");
 
-const downloadMasterBtn = el("downloadMasterBtn");
-const clearEntriesBtn = el("clearEntriesBtn");
-const countInfo = el("countInfo");
+// ✅ YOUR GOOGLE WEB APP URL
+const WEB_APP_URL =
+  "https://script.google.com/macros/s/AKfycbxEEnZwnWYXQMKkUbzVwoVGemtP-qcvzs02s4le1S0xy1oVXrDJ7Eq4WZl97PfrW7o/exec";
 
-const STORAGE_KEY = "inventory_entries_v3";
-
-// serials stored even when switching equipment
-const serialState = { laptop: "", printer: "", cpu: "", monitor: "" };
+// Store serials while switching dropdown
+const serialState = {
+  laptop: "",
+  printer: "",
+  cpu: "",
+  monitor: ""
+};
 
 function fillSelect(selectEl, options, placeholderText = null) {
   selectEl.innerHTML = "";
@@ -55,13 +58,14 @@ function fillSelect(selectEl, options, placeholderText = null) {
   }
 }
 
-/** ✅ Block -> Floors (DOSH => no floors) */
+// ===============================
+// BLOCK → FLOOR LOGIC
+// ===============================
 function updateFloors() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
 
   if (floors.length === 0) {
-    // DOSH or any block with no floors
     floor.innerHTML = "";
     const opt = document.createElement("option");
     opt.value = "N/A";
@@ -78,10 +82,11 @@ function updateFloors() {
   }
 }
 
-/** ✅ Show printer type only when Printer selected */
+// ===============================
+// PRINTER TYPE VISIBILITY
+// ===============================
 function updatePrinterTypeVisibility() {
-  const t = deviceType.value;
-  if (t === "Printer") {
+  if (deviceType.value === "Printer") {
     printerTypeWrap.style.display = "block";
     fillSelect(printerType, PRINTER_TYPES, "Select Printer Type");
     printerType.required = true;
@@ -92,7 +97,9 @@ function updatePrinterTypeVisibility() {
   }
 }
 
-/** ✅ Equipment dropdown depends on device type */
+// ===============================
+// EQUIPMENT SERIAL LOGIC
+// ===============================
 function updateEquipmentOptions() {
   const t = deviceType.value;
 
@@ -103,11 +110,13 @@ function updateEquipmentOptions() {
   } else if (t === "Printer") {
     fillSelect(equipment, ["Printer"]);
     equipment.value = "Printer";
-    serialHint.textContent = "Select printer type above, then enter the serial number.";
+    serialHint.textContent =
+      "Select printer type above, then enter the serial number.";
   } else if (t === "Desktop Computer") {
     fillSelect(equipment, ["CPU", "Monitor"]);
     equipment.value = "CPU";
-    serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
+    serialHint.textContent =
+      "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
   }
 
   syncSerialInput();
@@ -141,26 +150,29 @@ function syncSerialInput() {
 
 serialInput.addEventListener("input", () => {
   const eq = equipment.value;
-  const v = serialInput.value.trim();
+  const value = serialInput.value.trim();
 
-  if (eq === "Laptop") serialState.laptop = v;
-  if (eq === "Printer") serialState.printer = v;
-  if (eq === "CPU") serialState.cpu = v;
-  if (eq === "Monitor") serialState.monitor = v;
+  if (eq === "Laptop") serialState.laptop = value;
+  if (eq === "Printer") serialState.printer = value;
+  if (eq === "CPU") serialState.cpu = value;
+  if (eq === "Monitor") serialState.monitor = value;
 
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
 
+// ===============================
+// CREATE ROW OBJECT
+// ===============================
 function makeRow() {
   const t = deviceType.value;
 
   return {
     username: el("username").value.trim(),
     deviceType: t,
-    printerType: t === "Printer" ? (printerType.value || "") : "",
+    printerType: t === "Printer" ? printerType.value || "" : "",
 
     block: block.value,
-    floor: floor.disabled ? "N/A" : (floor.value || ""),
+    floor: floor.disabled ? "N/A" : floor.value || "",
     room: el("room").value.trim() || "",
 
     laptopSerial: t === "Laptop" ? serialState.laptop : "",
@@ -174,6 +186,9 @@ function makeRow() {
   };
 }
 
+// ===============================
+// VALIDATION
+// ===============================
 function validateBeforeSave() {
   const t = deviceType.value;
 
@@ -181,92 +196,31 @@ function validateBeforeSave() {
   if (!t) return "Device Type is required.";
   if (!block.value) return "Block is required.";
 
-  // If floors exist, floor is required; if DOSH (N/A), not required
   if (!floor.disabled && !floor.value) return "Floor is required.";
-
-  // Printer Type required
-  if (t === "Printer" && !printerType.value) return "Printer Type is required.";
-
+  if (t === "Printer" && !printerType.value)
+    return "Printer Type is required.";
   if (!os.value) return "Operating System is required.";
   if (!security.value) return "Security is required.";
 
-  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
+  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor))
     return "Desktop Computer requires BOTH CPU and Monitor serial numbers.";
-  }
-  if (t === "Laptop" && !serialState.laptop) return "Laptop serial number is required.";
-  if (t === "Printer" && !serialState.printer) return "Printer serial number is required.";
+
+  if (t === "Laptop" && !serialState.laptop)
+    return "Laptop serial number is required.";
+
+  if (t === "Printer" && !serialState.printer)
+    return "Printer serial number is required.";
 
   return null;
-}
-
-function loadEntries() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveEntries(entries) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  updateCount();
-}
-
-function updateCount() {
-  const entries = loadEntries();
-  if (countInfo) countInfo.textContent = `Saved entries: ${entries.length}`;
-}
-
-function entriesToCSV(entries) {
-  if (!entries.length) return "";
-
-  const headers = [
-    "username",
-    "deviceType",
-    "printerType",
-    "block",
-    "floor",
-    "room",
-    "laptopSerial",
-    "printerSerial",
-    "cpuSerial",
-    "monitorSerial",
-    "os",
-    "security",
-    "timestamp"
-  ];
-
-  const escape = (val) => `"${String(val ?? "").replaceAll('"', '""')}"`;
-
-  const lines = [
-    headers.join(","),
-    ...entries.map((row) => headers.map((h) => escape(row[h])).join(","))
-  ];
-
-  return lines.join("\n") + "\n";
-}
-
-function downloadText(filename, text) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 function resetFormForNextEntry() {
   el("username").value = "";
   el("room").value = "";
 
-  // Reset printer type
-  if (printerTypeWrap) printerTypeWrap.style.display = "none";
-  if (printerType) printerType.innerHTML = "";
+  printerTypeWrap.style.display = "none";
+  printerType.innerHTML = "";
 
-  // Clear serial states
   serialState.laptop = "";
   serialState.printer = "";
   serialState.cpu = "";
@@ -276,70 +230,45 @@ function resetFormForNextEntry() {
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 }
 
-// INIT dropdowns
+// ===============================
+// INIT
+// ===============================
 fillSelect(deviceType, DEVICE_TYPES, "Select Device Type");
 fillSelect(block, Object.keys(BLOCKS), "Select Block");
 fillSelect(os, OPERATING_SYSTEMS, "Select OS");
 fillSelect(security, SECURITY_OPTIONS, "Select Security");
 
-updateCount();
 preview.textContent = JSON.stringify(makeRow(), null, 2);
 
+// ===============================
 // EVENTS
-block.addEventListener("change", () => {
-  updateFloors();
-  preview.textContent = JSON.stringify(makeRow(), null, 2);
-});
-
+// ===============================
+block.addEventListener("change", updateFloors);
 deviceType.addEventListener("change", () => {
   updatePrinterTypeVisibility();
   updateEquipmentOptions();
-  preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
+equipment.addEventListener("change", syncSerialInput);
 
-printerType?.addEventListener("change", () => {
-  preview.textContent = JSON.stringify(makeRow(), null, 2);
-});
-
-equipment.addEventListener("change", () => {
-  syncSerialInput();
-  preview.textContent = JSON.stringify(makeRow(), null, 2);
-});
-
-form.addEventListener("input", () => {
-  preview.textContent = JSON.stringify(makeRow(), null, 2);
-});
-
-// ✅ SUBMIT = save only
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const err = validateBeforeSave();
   if (err) return alert(err);
 
-  const entries = loadEntries();
-  entries.push(makeRow());
-  saveEntries(entries);
+  const row = makeRow();
 
-  alert("Saved! Use 'Download Master CSV' to export all saved entries.");
-  resetFormForNextEntry();
-});
+  try {
+    await fetch(WEB_APP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(row)
+    });
 
-// ✅ DOWNLOAD MASTER CSV
-downloadMasterBtn?.addEventListener("click", () => {
-  const entries = loadEntries();
-  if (!entries.length) return alert("No saved entries yet.");
-
-  const csv = entriesToCSV(entries);
-  downloadText(`inventory_master_${Date.now()}.csv`, csv);
-});
-
-// ✅ CLEAR
-clearEntriesBtn?.addEventListener("click", () => {
-  const ok = confirm("Clear all saved entries? This cannot be undone.");
-  if (!ok) return;
-
-  localStorage.removeItem(STORAGE_KEY);
-  updateCount();
-  alert("Cleared.");
+    alert("Saved to master sheet successfully!");
+    resetFormForNextEntry();
+  } catch (error) {
+    alert("Error saving data. Check internet or Web App permissions.");
+    console.error(error);
+  }
 });
