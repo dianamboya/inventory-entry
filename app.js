@@ -5,7 +5,7 @@ import {
   PRINTER_TYPES,
   OPERATING_SYSTEMS,
   SECURITY_OPTIONS
-} from "./data.js?v=300";
+} from "./data.js?v=400";
 
 const el = (id) => document.getElementById(id);
 
@@ -26,17 +26,12 @@ const os = el("os");
 const security = el("security");
 const preview = el("preview");
 
-// ✅ YOUR GOOGLE WEB APP URL
+// ✅ YOUR GOOGLE APPS SCRIPT WEB APP URL
 const WEB_APP_URL =
   "https://script.google.com/macros/s/AKfycbxEEnZwnWYXQMKkUbzVwoVGemtP-qcvzs02s4le1S0xy1oVXrDJ7Eq4WZl97PfrW7o/exec";
 
-// Store serials while switching dropdown
-const serialState = {
-  laptop: "",
-  printer: "",
-  cpu: "",
-  monitor: ""
-};
+// Keep serials even when switching equipment dropdown
+const serialState = { laptop: "", printer: "", cpu: "", monitor: "" };
 
 function fillSelect(selectEl, options, placeholderText = null) {
   selectEl.innerHTML = "";
@@ -59,13 +54,14 @@ function fillSelect(selectEl, options, placeholderText = null) {
 }
 
 // ===============================
-// BLOCK → FLOOR LOGIC
+// BLOCK → FLOOR LOGIC (DOSH => N/A)
 // ===============================
 function updateFloors() {
   const b = block.value;
   const floors = BLOCKS[b]?.floors ?? [];
 
   if (floors.length === 0) {
+    // DOSH or any block with no floors
     floor.innerHTML = "";
     const opt = document.createElement("option");
     opt.value = "N/A";
@@ -110,13 +106,11 @@ function updateEquipmentOptions() {
   } else if (t === "Printer") {
     fillSelect(equipment, ["Printer"]);
     equipment.value = "Printer";
-    serialHint.textContent =
-      "Select printer type above, then enter the serial number.";
+    serialHint.textContent = "Select printer type above, then enter the serial number.";
   } else if (t === "Desktop Computer") {
     fillSelect(equipment, ["CPU", "Monitor"]);
     equipment.value = "CPU";
-    serialHint.textContent =
-      "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
+    serialHint.textContent = "For Desktop Computer, you must enter BOTH CPU and Monitor serial numbers.";
   }
 
   syncSerialInput();
@@ -150,12 +144,12 @@ function syncSerialInput() {
 
 serialInput.addEventListener("input", () => {
   const eq = equipment.value;
-  const value = serialInput.value.trim();
+  const v = serialInput.value.trim();
 
-  if (eq === "Laptop") serialState.laptop = value;
-  if (eq === "Printer") serialState.printer = value;
-  if (eq === "CPU") serialState.cpu = value;
-  if (eq === "Monitor") serialState.monitor = value;
+  if (eq === "Laptop") serialState.laptop = v;
+  if (eq === "Printer") serialState.printer = v;
+  if (eq === "CPU") serialState.cpu = v;
+  if (eq === "Monitor") serialState.monitor = v;
 
   preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
@@ -169,10 +163,10 @@ function makeRow() {
   return {
     username: el("username").value.trim(),
     deviceType: t,
-    printerType: t === "Printer" ? printerType.value || "" : "",
+    printerType: t === "Printer" ? (printerType.value || "") : "",
 
     block: block.value,
-    floor: floor.disabled ? "N/A" : floor.value || "",
+    floor: floor.disabled ? "N/A" : (floor.value || ""),
     room: el("room").value.trim() || "",
 
     laptopSerial: t === "Laptop" ? serialState.laptop : "",
@@ -197,19 +191,15 @@ function validateBeforeSave() {
   if (!block.value) return "Block is required.";
 
   if (!floor.disabled && !floor.value) return "Floor is required.";
-  if (t === "Printer" && !printerType.value)
-    return "Printer Type is required.";
+  if (t === "Printer" && !printerType.value) return "Printer Type is required.";
   if (!os.value) return "Operating System is required.";
   if (!security.value) return "Security is required.";
 
-  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor))
+  if (t === "Desktop Computer" && (!serialState.cpu || !serialState.monitor)) {
     return "Desktop Computer requires BOTH CPU and Monitor serial numbers.";
-
-  if (t === "Laptop" && !serialState.laptop)
-    return "Laptop serial number is required.";
-
-  if (t === "Printer" && !serialState.printer)
-    return "Printer serial number is required.";
+  }
+  if (t === "Laptop" && !serialState.laptop) return "Laptop serial number is required.";
+  if (t === "Printer" && !serialState.printer) return "Printer serial number is required.";
 
   return null;
 }
@@ -243,13 +233,31 @@ preview.textContent = JSON.stringify(makeRow(), null, 2);
 // ===============================
 // EVENTS
 // ===============================
-block.addEventListener("change", updateFloors);
+block.addEventListener("change", () => {
+  updateFloors();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
 deviceType.addEventListener("change", () => {
   updatePrinterTypeVisibility();
   updateEquipmentOptions();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
 });
-equipment.addEventListener("change", syncSerialInput);
 
+printerType?.addEventListener("change", () => {
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
+equipment.addEventListener("change", () => {
+  syncSerialInput();
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
+form.addEventListener("input", () => {
+  preview.textContent = JSON.stringify(makeRow(), null, 2);
+});
+
+// ✅ SUBMIT: send to Google Sheets using form-urlencoded (avoids CORS preflight)
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -258,17 +266,24 @@ form.addEventListener("submit", async (e) => {
 
   const row = makeRow();
 
+  // Send as x-www-form-urlencoded to avoid CORS preflight issues
+  const body = new URLSearchParams(row).toString();
+
   try {
-    await fetch(WEB_APP_URL, {
+    const res = await fetch(WEB_APP_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row)
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+      },
+      body
     });
+
+    if (!res.ok) throw new Error("Request failed");
 
     alert("Saved to master sheet successfully!");
     resetFormForNextEntry();
   } catch (error) {
-    alert("Error saving data. Check internet or Web App permissions.");
+    alert("Error saving data. Check Web App deployment access (Anyone) and redeploy new version.");
     console.error(error);
   }
 });
